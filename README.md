@@ -17,6 +17,12 @@ vapour compat-data 'civ' -d
 # Sid Meier's Civilization VI:
 # - /home/username/.local/share/Steam/steamapps/compatdata/289070/pfx/drive_c
 
+# appid => name translation
+vapour app-id 40
+# outputs:
+# 40:
+# - Deathmatch Classic
+
 # piping
 vapour compat-data 'civ' | head -n 1
 # example output:
