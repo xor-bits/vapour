@@ -1,50 +1,26 @@
-use clap::{Args, Parser};
+use clap::{CommandFactory, Parser};
+use clap_complete::generate;
 use directories::{ProjectDirs, UserDirs};
 use once_cell::sync::Lazy;
 use owo_colors::OwoColorize;
 use regex::RegexBuilder;
 use serde::Deserialize;
+
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, OpenOptions},
+    io,
     path::{Path, PathBuf},
 };
 
+use self::cli::{CliAppId, CliArgs, CliCompatData, CliCompletions};
+
 //
 
+mod cli;
 mod vdf;
 
 //
-
-#[derive(Debug, Clone, Parser)]
-#[command(author, version, about, long_about = None)]
-enum CliArgs {
-    AppId(CliAppId),
-    CompatData(CliCompatData),
-}
-
-#[derive(Debug, Clone, Copy, Args)]
-struct CliAppId {
-    app_id: u32,
-}
-
-#[derive(Debug, Clone, Args)]
-struct CliCompatData {
-    /// Make the regex case sensitive, by default it isn't
-    #[clap(short, long)]
-    case_sensitive: bool,
-
-    /// Sort the output by game name
-    #[clap(short, long)]
-    sort: bool,
-
-    /// basically appends "pfx/drive_c" to results
-    #[clap(short, long)]
-    drive_c: bool,
-
-    /// Regex pattern for game names
-    regex: Option<String>,
-}
 
 #[derive(Debug)]
 struct SteamLibrary {
@@ -245,6 +221,12 @@ fn main() {
                 );
             }
         }
+        CliArgs::Completions(CliCompletions { shell }) => generate(
+            *shell,
+            &mut CliArgs::command(),
+            env!("CARGO_BIN_NAME"),
+            &mut io::stdout(),
+        ),
     }
 }
 
