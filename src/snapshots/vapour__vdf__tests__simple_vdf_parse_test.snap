@@ -1,0 +1,37 @@
+---
+source: src/vdf.rs
+expression: vdf
+---
+Some(
+    {
+        "libraryfolders": Map(
+            {
+                "0": Map(
+                    {
+                        "apps": Map(
+                            {},
+                        ),
+                        "path": Value(
+                            "/home",
+                        ),
+                        "contentid": Value(
+                            "0",
+                        ),
+                        "label": Value(
+                            "",
+                        ),
+                        "totalsize": Value(
+                            "0",
+                        ),
+                        "update_clean_bytes_tally": Value(
+                            "0",
+                        ),
+                        "time_last_update_corruption": Value(
+                            "0",
+                        ),
+                    },
+                ),
+            },
+        ),
+    },
+)
