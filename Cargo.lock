@@ -1226,6 +1226,7 @@ dependencies = [
  "clap_complete",
  "directories",
  "insta",
+ "is-terminal",
  "once_cell",
  "owo-colors",
  "regex",

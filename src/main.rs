@@ -1,6 +1,7 @@
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 use directories::{ProjectDirs, UserDirs};
+use is_terminal::IsTerminal;
 use once_cell::sync::Lazy;
 use owo_colors::OwoColorize;
 use regex::RegexBuilder;
@@ -9,7 +10,7 @@ use serde::Deserialize;
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, OpenOptions},
-    io,
+    io, os,
     path::{Path, PathBuf},
 };
 
@@ -116,13 +117,19 @@ static APP_ID_DB: Lazy<HashMap<u32, String>> = Lazy::new(|| {
 //
 
 fn main() {
-    tracing_subscriber::fmt::init();
+    // tracing_subscriber::fmt::init();
+
+    let simple = !std::io::stdout().is_terminal();
 
     match &*ARGS {
         CliArgs::AppId(CliAppId { app_id }) => {
             let app = APP_ID_DB.get(app_id).unwrap();
 
-            println!("{}:\n - {}", app_id.bright_green(), app.yellow());
+            if simple {
+                println!("{app}")
+            } else {
+                println!("{}:\n - {}", app_id.bright_green(), app.yellow());
+            }
         }
         CliArgs::CompatData(CliCompatData {
             case_sensitive,
@@ -214,11 +221,15 @@ fn main() {
                     path = path.join("pfx").join("drive_c");
                 }
 
-                println!(
-                    "{}:\n - {}",
-                    game.name.bright_green(),
-                    path.display().yellow(),
-                );
+                if simple {
+                    print_path(&path);
+                } else {
+                    println!(
+                        "{}:\n - {}",
+                        game.name.bright_green(),
+                        path.display().yellow(),
+                    );
+                }
             }
         }
         CliArgs::Completions(CliCompletions { shell }) => generate(
@@ -228,6 +239,20 @@ fn main() {
             &mut io::stdout(),
         ),
     }
+}
+
+#[cfg(target_family = "unix")]
+fn print_path(path: &Path) {
+    use os::unix::ffi::OsStrExt;
+    use std::io::Write;
+    io::stdout().write_all(path.as_os_str().as_bytes()).unwrap();
+    println!();
+}
+
+#[cfg(target_family = "windows")]
+fn print_path(path: &Path) {
+    // TODO:
+    println!("{}", path.display());
 }
 
 fn base_steam() -> PathBuf {

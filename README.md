@@ -17,7 +17,7 @@ vapour compat-data 'civ' -d
 # Sid Meier's Civilization VI:
 # - /home/username/.local/share/Steam/steamapps/compatdata/289070/pfx/drive_c
 
-# TODO: piping
+# piping
 vapour compat-data 'civ' | head -n 1
 # example output:
 # /home/username/.local/share/Steam/steamapps/compatdata/289070/pfx/drive_c
