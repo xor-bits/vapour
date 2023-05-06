@@ -11,22 +11,22 @@ Some(
                         "apps": Map(
                             {},
                         ),
-                        "path": Value(
-                            "/home",
-                        ),
                         "contentid": Value(
                             "0",
                         ),
                         "label": Value(
                             "",
                         ),
+                        "path": Value(
+                            "/home",
+                        ),
+                        "time_last_update_corruption": Value(
+                            "0",
+                        ),
                         "totalsize": Value(
                             "0",
                         ),
                         "update_clean_bytes_tally": Value(
-                            "0",
-                        ),
-                        "time_last_update_corruption": Value(
                             "0",
                         ),
                     },

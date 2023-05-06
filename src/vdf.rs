@@ -1,12 +1,12 @@
-#[cfg(tests)] // "sorted" hashmap for testing
+#[cfg(test)] // "sorted" hashmap for testing
 use std::collections::BTreeMap;
-#[cfg(not(tests))]
+#[cfg(not(test))]
 use std::collections::HashMap;
 
 //
-#[cfg(not(tests))]
+#[cfg(not(test))]
 pub type Vdf<'s> = HashMap<&'s str, VdfValue<'s>>;
-#[cfg(tests)] // "sorted" hashmap for testing
+#[cfg(test)] // "sorted" hashmap for testing
 pub type Vdf<'s> = BTreeMap<&'s str, VdfValue<'s>>;
 
 #[derive(Debug, Clone)]
