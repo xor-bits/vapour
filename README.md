@@ -29,7 +29,7 @@ Rocket League: /home/username/.local/share/Steam/steamapps/compatdata/252950
 
 ### appid => name translation
 ```console
-vapour name-of 40
+$ vapour name-of 40
   Finished opening database
 Deathmatch Classic
 ```
