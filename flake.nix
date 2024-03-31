@@ -1,10 +1,10 @@
 {
-  description        = "vapour - general purpose cli tool for Steam related tasks";
+  description = "vapour - general purpose cli tool for Steam related tasks";
 
   inputs = {
-    nixpkgs.url      = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
-    flake-utils.url  = "github:numtide/flake-utils";
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
   outputs = { nixpkgs, rust-overlay, flake-utils, ... }:
@@ -20,14 +20,18 @@
         };
       in
       {
-        devShells.default = pkgs.mkShell {
+        # `nix develop`
+        devShells.default = pkgs.mkShell rec {
           buildInputs = with pkgs; [
             pkg-config
             openssl
             rust-bin.nightly.latest.default
           ];
+
+          LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}";
         };
 
+        # `nix build`
         packages.default = rustPlatform.buildRustPackage {
           name = "vapour";
 
@@ -44,7 +48,7 @@
             openssl
           ];
 
-          RUST_BACKTRACE=1;
+          RUST_BACKTRACE = 1;
         };
       }
     );

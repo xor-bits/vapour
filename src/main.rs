@@ -1,223 +1,124 @@
+use anyhow::{anyhow, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
-use directories::{ProjectDirs, UserDirs};
-use is_terminal::IsTerminal;
-use once_cell::sync::Lazy;
 use owo_colors::OwoColorize;
 use regex::RegexBuilder;
-use serde::Deserialize;
+use std::{cmp::Reverse, collections::BinaryHeap, io::IsTerminal};
 
-use std::{
-    collections::{HashMap, HashSet},
-    fs::{self, OpenOptions},
-    io, os,
-    path::{Path, PathBuf},
-};
+use std::{io, os, path::Path};
 
-use self::cli::{CliAppId, CliArgs, CliCompatData, CliCompletions};
+use self::cli::{CliArgs, CliCompatData, CliCompletions, CliIdOf, CliNameOf};
 
 //
 
 mod cli;
+mod db;
+mod library;
 mod vdf;
 
 //
 
-#[derive(Debug)]
-struct SteamLibrary {
-    path: PathBuf,
-    games: HashSet<u32>,
-}
-
-#[derive(Debug)]
-struct SteamApp<'a> {
-    appid: u32,
-    name: &'a str,
-    path: &'a Path,
-}
-
 //
 
-static DIRS: Lazy<ProjectDirs> = Lazy::new(|| {
-    if let Some(dirs) = ProjectDirs::from("app", "xor-bits", "vapour") {
-        return dirs;
-    }
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
 
-    panic!()
-});
+    let args: CliArgs = CliArgs::parse();
 
-static ARGS: Lazy<CliArgs> = Lazy::new(CliArgs::parse);
-
-static APP_ID_DB: Lazy<HashMap<u32, String>> = Lazy::new(|| {
-    fs::create_dir_all(DIRS.cache_dir()).unwrap();
-    let db_cache_file = DIRS.cache_dir().join("steam_appids");
-
-    tracing::debug!("db cache file: {}", db_cache_file.display());
-
-    let mut db_cache_file = OpenOptions::new()
-        .write(true)
-        .read(true)
-        .create(true)
-        .open(db_cache_file)
-        .unwrap();
-
-    // TODO: file locking
-    if db_cache_file.metadata().unwrap().len() == 0 {
-        #[derive(Deserialize)]
-        struct RawData {
-            applist: RawApplist,
-        }
-
-        #[derive(Deserialize)]
-        struct RawApplist {
-            apps: Vec<RawApp>,
-        }
-
-        #[derive(Deserialize)]
-        struct RawApp {
-            appid: u32,
-            name: String,
-        }
-
-        const URL: &str = "https://api.steampowered.com/ISteamApps/GetAppList/v2/";
-
-        tracing::debug!("Downloading Steam appid list from `{URL}`");
-
-        let result: RawData = reqwest::blocking::get(URL).unwrap().json().unwrap();
-
-        tracing::debug!("Download complete");
-
-        let db: HashMap<u32, String> = result
-            .applist
-            .apps
-            .into_iter()
-            .map(|app| (app.appid, app.name))
-            .collect();
-
-        tracing::debug!("Writing DB file");
-
-        bincode::serialize_into(&mut db_cache_file, &db).unwrap();
-        // serde_json::ser::to_writer(&mut db_cache_file, &db).unwrap();
-
-        tracing::debug!("DB loaded");
-
-        db
-    } else {
-        tracing::debug!("Reading + deserializing DB file");
-
-        let db = bincode::deserialize_from(&mut db_cache_file).unwrap();
-        // let db = serde_json::de::from_reader(&mut db_cache_file).unwrap();
-
-        tracing::debug!("DB loaded");
-
-        db
-    }
-});
-
-//
-
-fn main() {
-    // tracing_subscriber::fmt::init();
+    let appids = db::open_db().await?;
 
     let simple = !std::io::stdout().is_terminal();
 
-    match &*ARGS {
-        CliArgs::AppId(CliAppId { app_id }) => {
-            let app = APP_ID_DB.get(app_id).unwrap();
+    match args {
+        CliArgs::Update => {
+            db::update_appids(&appids).await?;
+        }
+        CliArgs::NameOf(CliNameOf { app_id }) => {
+            let app = appids
+                .get(app_id.to_le_bytes())?
+                .ok_or_else(|| anyhow!("App not found!"))?;
 
-            if simple {
-                println!("{app}")
+            let app_name = std::str::from_utf8(app.as_ref())
+                .map_err(|err| anyhow!("Invalid database: {err}"))?;
+
+            println!("{app_name}")
+        }
+        CliArgs::IdOf(CliIdOf {
+            case_sensitive,
+            installed,
+            regex,
+        }) => {
+            let regex = RegexBuilder::new(regex.as_str())
+                .case_insensitive(!case_sensitive)
+                .build()
+                .map_err(|err| anyhow!("App name regex must be valid: {err}"))?;
+
+            let mut sorted = BinaryHeap::new();
+
+            if installed {
+                let libs = library::load_steam_libraries()?;
+
+                for app in libs.apps(&appids) {
+                    let Some(app_name) = app.app_name() else {
+                        continue;
+                    };
+
+                    if !regex.is_match(app_name) {
+                        continue;
+                    }
+
+                    sorted.push((Reverse(app_name.to_string()), app.app_id));
+                }
             } else {
-                println!("{}:\n - {}", app_id.bright_green(), app.yellow());
+                // FIXME: this is 'slow'
+                for row in appids.iter() {
+                    let (app_id, app_name) = row?;
+                    let app_id = app_id
+                        .as_ref()
+                        .try_into()
+                        .map_err(|err| anyhow!("Invalid database: {err}"))?;
+                    let app_id = u32::from_le_bytes(app_id);
+                    let app_name = std::str::from_utf8(app_name.as_ref())
+                        .map_err(|err| anyhow!("Invalid database: {err}"))?;
+
+                    if !regex.is_match(app_name) {
+                        continue;
+                    }
+
+                    sorted.push((Reverse(app_name.to_string()), app_id));
+                }
+            }
+
+            while let Some((Reverse(app_name), app_id)) = sorted.pop() {
+                println!("{}: {}", app_name.bright_green(), app_id.yellow());
             }
         }
         CliArgs::CompatData(CliCompatData {
             case_sensitive,
-            sort,
             drive_c,
             regex,
         }) => {
-            let regex = regex.as_ref().map(|regex| {
-                RegexBuilder::new(regex)
-                    .case_insensitive(!*case_sensitive)
-                    .build()
-                    .unwrap()
-            });
+            let regex = RegexBuilder::new(regex.as_str())
+                .case_insensitive(!case_sensitive)
+                .build()
+                .map_err(|err| anyhow!("App name regex must be valid: {err}"))?;
 
-            let base_steam = base_steam();
-            let library_folders = base_steam.join("config").join("libraryfolders.vdf");
+            let libs = library::load_steam_libraries()?;
+            let mut games = libs
+                .apps(&appids)
+                .filter(|app| app.app_name().map_or(false, |name| regex.is_match(name)))
+                .map(Reverse)
+                .collect::<BinaryHeap<_>>();
 
-            let library_folders = fs::read_to_string(library_folders).unwrap();
-
-            let library_folders = vdf::VdfParser::from_str(&library_folders)
-                .parse_entries()
-                .unwrap();
-
-            // TODO: fix this holy fucking unwrap hell
-            let steam_libraries = library_folders
-                .get("libraryfolders")
-                .unwrap()
-                .as_map()
-                .unwrap()
-                .values()
-                .map(|library| {
-                    let library = library.as_map().unwrap();
-                    let path = library
-                        .get("path")
-                        .unwrap()
-                        .as_value()
-                        .unwrap()
-                        .parse()
-                        .unwrap();
-                    let games = library
-                        .get("apps")
-                        .unwrap()
-                        .as_map()
-                        .unwrap()
-                        .keys()
-                        .map(|key| key.parse::<u32>().unwrap())
-                        .collect();
-
-                    SteamLibrary { path, games }
-                })
-                .collect::<Vec<_>>();
-
-            let mut games = steam_libraries
-                .iter()
-                .flat_map(|library| {
-                    library
-                        .games
-                        .iter()
-                        .copied()
-                        .filter_map(|appid| {
-                            Some(SteamApp {
-                                appid,
-                                name: APP_ID_DB.get(&appid)?,
-                                path: &library.path,
-                            })
-                        })
-                        .filter(|game| {
-                            if let Some(regex) = regex.as_ref() {
-                                regex.is_match(game.name)
-                            } else {
-                                true
-                            }
-                        })
-                })
-                .collect::<Vec<_>>();
-
-            if *sort {
-                games.sort_by_key(|game| game.name);
-            }
-
-            for game in games {
+            while let Some(Reverse(game)) = games.pop() {
                 let mut path = game
                     .path
                     .join("steamapps")
                     .join("compatdata")
-                    .join(format!("{}", game.appid));
+                    .join(format!("{}", game.app_id));
 
-                if *drive_c {
+                if drive_c {
                     path = path.join("pfx").join("drive_c");
                 }
 
@@ -225,27 +126,29 @@ fn main() {
                     print_path(&path);
                 } else {
                     println!(
-                        "{}:\n - {}",
-                        game.name.bright_green(),
+                        "{}: {}",
+                        game.app_name().unwrap_or("").bright_green(),
                         path.display().yellow(),
                     );
                 }
             }
         }
         CliArgs::Completions(CliCompletions { shell }) => generate(
-            *shell,
+            shell,
             &mut CliArgs::command(),
             env!("CARGO_BIN_NAME"),
             &mut io::stdout(),
         ),
     }
+
+    Ok(())
 }
 
 #[cfg(target_family = "unix")]
 fn print_path(path: &Path) {
     use os::unix::ffi::OsStrExt;
     use std::io::Write;
-    io::stdout().write_all(path.as_os_str().as_bytes()).unwrap();
+    _ = io::stdout().write_all(path.as_os_str().as_bytes());
     println!();
 }
 
@@ -253,19 +156,4 @@ fn print_path(path: &Path) {
 fn print_path(path: &Path) {
     // TODO:
     println!("{}", path.display());
-}
-
-fn base_steam() -> PathBuf {
-    let dirs = UserDirs::new().unwrap();
-    // TODO: fix this hardcoded shit
-    let base_steam_0 = dirs.home_dir().join(".steam").join("steam");
-    let base_steam_1 = dirs.home_dir().join(".local").join("share").join("Steam");
-
-    if base_steam_0.is_symlink() || base_steam_0.is_dir() {
-        base_steam_0
-    } else if base_steam_1.is_symlink() || base_steam_1.is_dir() {
-        base_steam_1
-    } else {
-        panic!("Base Steam dir not found")
-    }
 }
