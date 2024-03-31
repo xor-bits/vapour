@@ -4,27 +4,32 @@ general purpose cli tool for Steam related tasks
 
 ## Install
 ```bash
-git clone https://github.com/xor-bits/vapour
-cd vapour
-cargo install --path .
+cargo install --locked --git https://github.com/xor-bits/vapour
 ```
 
 ## Usage
-```bash
-# get the proton pfx path for games that have 'civ' in their names
-vapour compat-data 'civ' -d
-# example output:
-# Sid Meier's Civilization VI:
-# - /home/username/.local/share/Steam/steamapps/compatdata/289070/pfx/drive_c
 
-# appid => name translation
-vapour app-id 40
-# outputs:
-# 40:
-# - Deathmatch Classic
+### get app-id of installed games matching regex 'factor'
 
-# piping
-vapour compat-data 'civ' | head -n 1
-# example output:
-# /home/username/.local/share/Steam/steamapps/compatdata/289070/pfx/drive_c
+```console
+$ vapour id-of -i factor
+  Finished opening database
+  Finished loading Steam libraryfolders.vdf
+Factorio: 427520
+Satisfactory: 526870
+```
+
+### get compatdata directory of games matching regex 'civ'
+```console
+$ vapour compat-data rocket
+  Finished opening database
+  Finished loading Steam libraryfolders.vdf
+Rocket League: /home/username/.local/share/Steam/steamapps/compatdata/252950
+```
+
+### appid => name translation
+```console
+vapour name-of 40
+  Finished opening database
+Deathmatch Classic
 ```
