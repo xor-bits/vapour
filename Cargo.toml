@@ -1,6 +1,8 @@
 [package]
 name = "vapour"
+description = "general purpose cli tool for Steam related tasks"
 authors = ["Eemeli Lehtonen"]
+license-file = "LICENSE"
 version = "0.2.0"
 edition = "2021"
 
