@@ -18,23 +18,22 @@ mod vdf;
 
 //
 
-//
-
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let args: CliArgs = CliArgs::parse();
 
-    let appids = db::open_db().await?;
-
     let simple = !std::io::stdout().is_terminal();
 
     match args {
         CliArgs::Update => {
+            let appids = db::open_db().await?;
             db::update_appids(&appids).await?;
         }
         CliArgs::NameOf(CliNameOf { app_id }) => {
+            let appids = db::open_db().await?;
+
             let app = appids
                 .get(app_id.to_le_bytes())?
                 .ok_or_else(|| anyhow!("App not found!"))?;
@@ -49,6 +48,8 @@ async fn main() -> Result<()> {
             installed,
             regex,
         }) => {
+            let appids = db::open_db().await?;
+
             let regex = RegexBuilder::new(regex.as_str())
                 .case_insensitive(!case_sensitive)
                 .build()
@@ -99,6 +100,8 @@ async fn main() -> Result<()> {
             drive_c,
             regex,
         }) => {
+            let appids = db::open_db().await?;
+
             let regex = RegexBuilder::new(regex.as_str())
                 .case_insensitive(!case_sensitive)
                 .build()
